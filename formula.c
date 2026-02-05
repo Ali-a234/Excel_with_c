@@ -205,9 +205,9 @@ double Function(Sheet* sheet, char **s)
         return fabs(value);
 
     if (strcmp(name, "sin") == 0) 
-        return sin(value);
+        return sin(value * PI / 180.0);
     if (strcmp(name, "cos") == 0) 
-        return cos(value);
+        return cos(value * PI / 180.0);
 
     if (strcmp(name, "sinh") == 0)
         return sinh(value);
@@ -223,12 +223,12 @@ double Function(Sheet* sheet, char **s)
             set_error(Domain_error);
             return 0;
         } 
-        return tan(value);
+        return tan(value * PI / 180.0);
     }
 
     if (strcmp(name, "cot") == 0)
     {
-        double t = tan(value);
+        double t = tan(value * PI / 180.0);
         if (t == 0)
         {
             set_error(Domain_error);
@@ -259,7 +259,7 @@ double Function(Sheet* sheet, char **s)
             set_error(Domain_error); 
             return 0; 
         }
-        return log(value);
+        return log10(value);
     }
 
     set_error(UnknownFunction_error);
