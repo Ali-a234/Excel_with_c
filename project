@@ -1,0 +1,265 @@
+#ifndef SHEET_H
+#define SHEET_H
+
+#include <stddef.h>
+
+typedef struct {
+    int rows;
+    int cols;
+    double **cells;
+} Sheet;
+
+// جدول دینامیک با تعداد سطر و ستون اولیه
+Sheet* createSheet(int rows, int cols);
+
+//آزاد کردن حافظه
+void freeSheet(Sheet* sheet);
+
+//دریافت مقدار سلول با آدرس
+int getCellByAddress(Sheet* sheet, const char *addr, double *value);
+
+// ست کردن مقدار سلول با آدرس
+int setCellByAddress(Sheet* sheet, const char *addr, double value);
+
+// اضافه کردن سطر یا ستون
+int addRow(Sheet* sheet);
+int addCol(Sheet* sheet);
+
+#endif
+#include <stdio.h>
+#include <stdlib.h>
+#include "sheet.h"
+#include "formula.h"
+#include "file.h"
+#include "error.h"
+
+int main()
+{
+    Sheet* sheet = createSheet(5, 5);
+    clear_error();
+
+    int choice;
+    while (1)
+    {
+        printf("\n1. Set cell value\n2. Print table\n");
+        printf("3. Evaluate formula\n4. Save\n");
+        printf("5. Load\n0. Exit\nChoose: ");
+               
+        scanf("%d", &choice);
+        getchar();
+
+        switch (choice)
+        {
+            case 1:
+            {
+                char addr[10];
+                double value;
+                printf("Enter cell (e.g., A1): ");
+                scanf("%s", addr);
+                printf("Enter value: ");
+                scanf("%lf", &value);
+
+                if (!setCellByAddress(sheet, addr, value))
+                    printf("%s\n", message_error());
+                break;
+            }
+        
+            case 2:
+            {
+                printf("\n   ");
+                for (int c = 0; c < sheet->cols; c++)
+                printf(" %c  ", 'A' + c);
+                printf("\n");
+
+                for (int r = 0; r < sheet->rows; r++)
+                {
+                    printf("%d |", r + 1);
+                    for (int c = 0; c < sheet->cols; c++)
+                        printf(" %.1lf", sheet->cells[r][c]);
+                    printf("\n");
+                }
+                break;
+            }
+
+            case 3:
+            {
+                char expr[100];
+                printf("Enter formula (e.g., A1 + sin(A2)): ");
+                fgets(expr, sizeof(expr), stdin);
+                expr[strcspn(expr, "\n")] = 0;
+
+                double result = evaluateFormula(sheet, expr);
+                if (get_error() != No_error)
+                    printf("%s\n", message_error());
+                else
+                    printf("Result = %.2lf\n", result);
+		clear_error();
+                break;
+            }
+
+            case 4:
+            {
+                char filename[50];
+                printf("Enter filename to save: ");
+                scanf("%s", filename);
+                if (!saveSheetToFile(sheet, filename))
+                    printf("%s\n", message_error());
+                break;
+            }
+
+            case 5:
+            {
+                char filename[50];
+                printf("Enter filename to load: ");
+                scanf("%s", filename);
+                if (!loadSheetFromFile(sheet, filename))
+                    printf("%s\n", message_error());
+                break;
+            }
+            
+            case 0:
+                return 0;
+
+            default:
+            {
+                set_error(Syntax_error);
+                break;
+            }
+        }
+        #include "sheet.h"
+#include "error.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <string.h>
+
+//ایجاد جدول با تعداد مشخص سطر و ستون
+Sheet* createSheet(int rows, int cols);
+
+//آزاد کردن حافظه جدول
+void freeSheet(Sheet* sheet);
+
+//تبدیل آدرس سلول به شماره سطر و ستون
+static int parseAddress(const char *addr, int *row, int *col);
+
+//خواندن مقدار سلولی مشخص
+int getCellByAddress(Sheet* sheet, const char *addr, double *value);
+
+//قرار دادن مقدار در سلولی مشخص
+int setCellByAddress(Sheet* sheet, const char *addr, double value);
+
+//اضافه کردن ردیف جدید
+int addRow(Sheet* sheet);
+
+//اضافه کردن ستون جدید
+int addCol(Sheet* sheet);
+
+Sheet* createSheet(int rows, int cols)
+{
+    Sheet* sheet = (Sheet*)malloc(sizeof(Sheet));
+    sheet->rows = rows;
+    sheet->cols = cols;
+
+    sheet->cells = (double**)malloc(rows * sizeof(double*));
+    for (int i = 0; i < rows; i++)
+        sheet->cells[i] = (double*)calloc(cols, sizeof(double));
+
+    return sheet;
+}
+
+void freeSheet(Sheet* sheet)
+{
+    if (!sheet) 
+        return;
+    for (int i = 0; i < sheet->rows; i++)
+        free(sheet->cells[i]);
+    free(sheet->cells);
+    free(sheet);
+}
+
+static int parseAddress(const char *addr, int *row, int *col)
+{
+    if (!isalpha(addr[0])) 
+        return 0;
+    *col = toupper(addr[0]) - 'A';
+    *row = 0;
+    for (int i = 1; addr[i]; i++)
+    {
+        if (!isdigit(addr[i])) 
+            return 0;
+        *row = *row * 10 + (addr[i] - '1') + 1;
+    }
+    (*row)--;
+    return 1;
+}
+
+int getCellByAddress(Sheet* sheet, const char *addr, double *value)
+{
+    int row, col;
+    if (!parseAddress(addr, &row, &col) ||
+        row < 0 || col < 0)
+    {
+        set_error(InvalidCell_error);
+        return 0;
+    }
+
+    if (row >= sheet->rows || col >= sheet->cols)
+    {
+        *value = 0;
+        return 1;
+    }
+    
+    *value = sheet->cells[row][col];
+    return 1;
+}
+
+int setCellByAddress(Sheet* sheet, const char *addr, double value)
+{
+    int row, col;
+    if (!parseAddress(addr, &row, &col))
+    {
+        set_error(InvalidCell_error);
+        return 0;
+    }
+
+    while (row >= sheet->rows)
+        addRow(sheet);
+
+    while (col >= sheet->cols)
+        addCol(sheet);
+
+    sheet->cells[row][col] = value;
+    return 1;
+}
+
+int addRow(Sheet* sheet)
+{
+    double **newCells = (double**)realloc(sheet->cells, (sheet->rows + 1) * sizeof(double*));
+    if (!newCells) 
+        return 0;
+    sheet->cells = newCells;
+    sheet->cells[sheet->rows] = (double*)calloc(sheet->cols, sizeof(double));
+    if (!sheet->cells[sheet->rows]) 
+        return 0;
+    sheet->rows++;
+    return 1;
+}
+
+int addCol(Sheet* sheet)
+{
+    for (int i = 0; i < sheet->rows; i++)
+    {
+        double *newRow = (double*)realloc(sheet->cells[i], (sheet->cols + 1) * sizeof(double));
+        if (!newRow) 
+            return 0;
+        newRow[sheet->cols] = 0;
+        sheet->cells[i] = newRow;
+    }
+    sheet->cols++;
+    return 1;
+}
+    }
+
+    freeSheet(sheet);
+    return 0;
+}
